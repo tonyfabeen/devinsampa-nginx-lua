@@ -1,0 +1,611 @@
+<!doctype html>  
+<html lang="en">
+	
+	<head>
+		<meta charset="utf-8">
+		
+		<title>Nginx Scripting</title>
+
+		<meta name="description" content="How to extending Nginx functionalities with Lua"/>
+		<meta name="author" content="Hakim El Hattab">
+
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		
+		<link href='http://fonts.googleapis.com/css?family=Lato:400,700,400italic,700italic' rel='stylesheet' type='text/css'>
+		
+		<link rel="stylesheet" href="css/reset.css">
+		<link rel="stylesheet" href="css/main.css">
+		<link rel="stylesheet" href="css/print.css" type="text/css" media="print">
+
+		<link rel="stylesheet" href="lib/css/zenburn.css">
+	</head>
+	
+	<body>
+		
+		<div id="reveal "class="reveal">
+
+			<!-- Used to fade in a background when a specific slide state is reached -->
+			<div class="state-background"></div>
+			
+			<!-- Any section element inside of this container is displayed as a slide -->
+			<div class="slides">
+				<section class="last">
+					<h1>Nginx Scripting</h1>
+					<h3 class="inverted">Extending Nginx functionalities with Lua</h3>
+					<p>
+                                          <i>
+                                            <small>
+                                              <a href="http://www.tonyfabeen.com">Tony Fabeen</a> 
+                                              / <a href="http://twitter.com/tonyfabeen">@tonyfabeen</a>
+                                              / <a href="http://slimstacks.com">SlimStacks</a>
+                                            </small>
+                                          </i>
+					</p>
+					<script>
+						// Delicously hacky. Look away.
+						if( navigator.userAgent.match( /(iPhone|iPad|iPod|Android)/i ) ) document.write( '<p style="color: rgba(0,0,0,0.3); text-shadow: none;">('+'Tap to navigate'+')</p>' );
+					</script>
+				</section>
+				
+				<section>
+					<h2>Who am I</h2>
+					<p class="fragment">
+                                          <img src="img/logo_slimstacks_color_nobg.png" style="width: 750px;">
+                                        </p>
+				</section>
+
+                                <section>
+ 					<h2>Nginx ("Engine-X")</h2>
+					<ul>
+                                           <li>High performance HTTP, POP/IMAP and reverse proxy server.</li>
+                                           <li>Started in  2002 by Igor Sysoev, public in 2004.</li>
+                                           <li>Entirely written in C.</li>
+                                           <li>Hosts nearly 12.18% of active sites across all domains.</li>
+                                           <li>Nginx.com in 2011.</li>
+                                       </ul>
+                                </section>
+
+                                <section id="master-worker">
+                                  <section>
+                                    <h2>Master Worker Model</h2>
+                                  </section>
+                                  <section>
+                                    <p>
+                                      <code class="fragment">
+                                        $ ps aux | grep nginx
+                                      </code>
+                                    </p>
+                                    <p>&nbsp;</p>
+                                    <code>
+                                      <p class="fragment">
+                                        <small>root 31329 ... nginx: master process /opt/nginx/sbin/nginx</small>
+                                      </p>
+                                      <p class="fragment">
+                                        <small>
+                                          www  &nbsp;31330 ... nginx: worker process 
+                                          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                                          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                                          &nbsp;
+                                        </small>
+                                      </p>
+                                    </code>
+                                  </section>
+                                  <section>
+                                    <img src="img/master_worker_model.png"/>
+                                  </section>
+                                  <section>
+                                    <h2>Master Process</h2>
+                                    <ul>
+                                      <li>
+                                       reading and validating configuration
+                                      </li>
+                                      <li>
+                                       creating, binding and closing sockets
+                                      </li>
+                                      <li>
+                                       starting, terminating and maintaining the configured number of
+                                        <code>worker</code> processes
+                                      </li>
+                                      <li>
+                                       re-opening log files
+                                      </li>
+                                      <li>
+                                       compiling embedded Perl scripts
+                                      </li>
+                                    </ul>
+                                  </section>
+                                  <section>
+                                    <h2>Worker Process</h2>
+                                    <ul class="fragment">
+                                      <li>Do all important stuff</li>
+                                      <li>Handle connection from clients</li>
+                                      <li>Reverse Proxy and Filtering functionalities</li>
+                                    </ul>
+                                  </section>
+                                </section>
+
+                                <section id="request-pipeline">
+                                  <section>
+                                    <h2>Request Processing</h2>
+                                  </section>
+                                  <section>
+                                    <img src="img/request_pipeline.png" width="824" height="564"/>
+                                  </section>
+                                  <section>
+                                    <h2>Request Phases</h2>
+                                  </section>
+                                  <section>
+                                    <h2>Server Rewrite Phase</h2>
+                                    <p>request URI transformation on virtual server level</p>
+                                  </section>
+                                  <section>
+                                    <h2>Find Config Phase</h2>
+                                    <p>configuration location lookup</p>
+                                  </section>
+                                  <section>
+                                    <h2>Rewrite Phase</h2>
+                                    <p>request URI transformation on location level</p>
+                                  </section>
+                                 <section>
+                                    <h2>Access Phase</h2>
+                                    <p>access restrictions check phase</p>
+                                  </section>
+                                 <section>
+                                    <h2>Try files Phase</h2>
+                                    <p>try_files directive processing phase</p>
+                                 </section>
+                                 <section>
+                                    <h2>Content Phase</h2>
+                                    <p>content generation phase</p>
+                                 </section>
+                                 <section>
+                                    <h2>Log Phase</h2>
+                                    <p>logging phase</p>
+                                 </section>
+                                </section>
+
+                                <section id="code-architecture">
+                                  <section>
+                                    <h2>Modularity</h2>
+                                    <ul>
+                                      <li class="fragment">Core Module</li>
+                                      <li class="fragment">Functional Modules</li>
+                                    </ul>
+                                  </section>
+                                  <section>
+                                    <h2>Core Module</h2>
+                                    <ul>
+                                      <li class="fragment">Event Loop</li>
+                                      <li class="fragment">Module execution control</li>
+                                    </ul>
+                                  </section>
+                                  <section>
+                                    <h2>Functional Modules</h2>
+                                    <ul>
+                                      <li>Read from / Write to Network and Storage</li>
+                                      <li>Transform Content</li>
+                                      <li>Outbound Filtering</li>
+                                      <li>Server Side Includes</li>
+                                      <li>Upstream Server communication</li>
+                                      <li>...etc</li>
+                                    </ul>
+                                  </section>
+                                </section>
+
+                                <section>
+                                  <section>
+                                    <h2>Lua on the Stage</h2>
+                                    <img src="img/lua.gif"/>
+                                  </section>
+                                  <section>
+                                    <h2>A bit of Lua</h2>
+                                    <ul>
+                                      <li>Created in Brazil</li>
+                                      <li>Portable</li>
+                                      <li>Simple</li>
+                                      <li>Small</li>
+                                      <li>Easy to embed</li>
+                                      <li>Fast</li>
+                                    </ul>
+                                  </section>
+                                  <section>
+                                    <h2>OSS using Lua</h2>
+                                    <p>
+                                      <img src="img/redis.png" style="border:0;"/>
+                                      <img src="img/lighttpd.png" style="border:0"/>
+                                    </p>
+                                    <p>
+                                      <img src="img/apache_http.gif"/>
+                                      <img src="img/wireshark.png"/>
+                                    </p>
+                                  </section>
+                                </section>
+
+                                <section>
+                                 <h2>Lua Nginx Module</h2>
+                                 <a href="https://github.com/chaoslawful/lua-nginx-module/">
+                                     https://github.com/chaoslawful/lua-nginx-module/
+                                 </a>
+                                 <ul>
+                                   <li>Created by <a href="http://Taobao.com">TaoBao.com</a> Engineers</li>
+                                   <li>High concurrent and non-blocking request processing</li>
+                                   <li>Programs can be written in the plain-old sequential way</li>
+                                   <li>Nginx takes care of I/O operations and Lua Nginx Module restore the context and resume the program logic</li>
+                                 </ul>
+                                </section>
+
+                                <section>
+                                  <h2>Lua Nginx Module</h2>
+                                  <a href="https://github.com/chaoslawful/lua-nginx-module">
+                                   https://github.com/chaoslawful/lua-nginx-module
+                                  </a>
+                                  <ul>
+                                    <li>Introduces directives for running Lua inside Nginx</li>
+                                    <li>Exposes the Nginx environment to Lua via an Api</li>
+                                    <li>It's fast</li>
+                                    <li>Is even faster when compiled with LUA JIT(Just in Time Compiler)</li>
+                                  </ul>
+                               </section>
+
+                               <section>
+                                 <h2>Nginx Lua API</h2>
+                               </section>
+
+                               <section>
+                                 <h2>Directives</h2>
+                                 <p>Configuration directives serve
+                                 as gateways to the Lua API within the nginx.conf file.</p>
+                                 <br/>
+                                 <small>
+                                   <ul>
+                                     <li><code>content_by_lua <strong>LUA_SCRIPT_STRING</strong></code></li>
+                                     <li><code>rewrite_by_lua <strong>LUA_SCRIPT_STRING</strong></code></li>
+                                     <li><code>access_by_lua <strong>LUA_SCRIPT_STRING</strong></code></li>
+                                     <li><code>content_by_lua_file <strong>PATH_TO_LUA_SCRIPT_FILE</strong></code></li>
+                                     <li><code>rewrite_by_lua_file <strong>PATH_TO_LUA_SCRIPT_FILE</strong></code></li>
+                                     <li><code>access_by_lua_file <strong>PATH_TO_LUA_SCRIPT_FILE</strong></code></li>
+                                   </ul>
+                                 </small>
+                                 <br/><br/>
+                                 <p>
+                                   <small>
+                                     Unless you set <strong><code>lua_code_cache</code></strong> to <strong><code>off</code></strong>
+                                     , modules will be loaded once on the first request.
+                                   </small>
+                                 </p>
+                               </section>
+
+                               <section>
+                                 <h2> ngx Package</h2>
+                                 Nginx Environment is exposed via <strong><code>ngx</code></strong> package
+                                 <ul>
+                                   <li><code>ngx.arg.<strong>url_arg</strong></code></li>
+                                   <li><code>ngx.var.<strong>VARIABLE_NAME</strong></code></li>
+                                   <li><code>ngx.header.<strong>HEADER_ATTRIBUTE</strong></code></li>
+                                   <li><code>ngx.ctx</code></li>
+                                 </ul>
+                               </section>
+
+                               <section>
+                                 <h2>Hello World !</h2>
+                                 <pre><code>    location /hello-user-by-lua {
+      default_type "text/plain";
+      content_by_lua '
+        ngx.say("Hello, ", ngx.var.arg_name, "!")
+      ';
+    }
+
+    location /hello-user-by-nginx {
+      echo "Hello, $arg_name !";
+    }
+
+$ curl http://localhost/hello-user-by-lua?name=DevInSampa
+  Hello, DevInSampa !
+$ curl http://localhost/hello-user-by-nginx?name=DevInSampa
+  Hello, DevInSampa !
+                                   </code></pre>
+                               </section>
+
+                               <section>
+                                 <h2>Nginx Vars</h2>
+                                 <pre><code>        location /acessing-nginx-args {
+          set $first 35;
+          set $second 65;
+
+          set_by_lua $sum '
+            return ngx.var.first + ngx.var.second
+          ';
+
+          echo "The sum is $sum";
+        }
+
+$ curl http://localhost/acessing-nginx-args
+  The sum is 99
+                                </code></pre>
+                               </section>
+
+                               <section>
+                                 <h2>Nginx Subrequests</h2>
+                                   <pre><code>
+location /lua-subrequests {
+  content_by_lua '
+    local response = ngx.location.capture("/hello-user-by-nginx?name=DevInSampa") 
+    if response.status >= 500 then  
+       ngx.exit(response.status) 
+    end 
+
+    ngx.status = response.status 
+    ngx.say(response.body) 
+  ';
+}
+
+$ curl http://localhost/lua-subrequests
+  Hello, DevInSampa !
+                                </code></pre>
+                               </section>
+
+                               <section>
+                                 <h2>Non Blocking I/O Subrequests</h2>
+                                 <pre><code><small>
+location /analytics-increment {
+    content_by_lua '
+      local response = ngx.location.capture("/redis",
+          {args = {cmd = "incr", key = ngx.var.arg_link}})
+      ngx.say("Incremented to :", ngx.var.arg_link)
+    ';
+}
+location /redis {
+  internal;
+  set_unescape_uri $key $arg_key;
+  set_unescape_uri $cmd $arg_cmd;
+  redis2_query $cmd $key;
+  redis2_pass 127.0.0.1:6379;
+}
+
+$ curl http://localhost/analytics-increment?link=http://www.devinsampa.com.br
+  Incremented to :http://www.devinsampa.com.br
+                                 </small></code></pre>
+                               </section>
+
+                               <section>
+                                 <h2>Filters</h2>
+                               </section>
+
+                               <section>
+                                 <h2>Header Filters</h2>
+                                 <pre><code>
+location / {
+  proxy_pass http://localhost:8080;
+  header_filter_by_lua 'ngx.header.Server = "My Little Server"';
+}
+
+$ curl -i -X HEAD http://localhost/header-filter
+  HTTP/1.1 200 OK
+  Date: Sun, 09 Sep 2012 21:18:11 GMT
+  <strong>Server: My Little Server</strong>
+  Content-Type: text/html;charset=utf-8
+  Content-Length: 449
+  Connection: keep-alive
+  Status: 200 OK
+  X-Frame-Options: sameorigin
+  X-XSS-Protection: 1; mode=block
+  X-Cascade: pass
+  X-Rack-Cache: miss
+</code></pre>
+                               </section>
+
+                               <section>
+                                 <h2>Body Filters</h2>
+                                 <pre><code>
+location /body-filter {
+  echo "My content";
+
+  body_filter_by_lua '
+    ngx.arg[1] = string.gsub(ngx.arg[1], "My", "Your")
+    ngx.arg[2] = true --set eof or last chain buffer
+  ';
+}
+
+$ curl http://localhost/body-filter
+  Your content
+                                </pre></code>
+                               </section>
+
+                               <section>
+                                 <h2>CoSockets</h2>
+                                 <ul>
+                                   <li>Non Blocking, of course</li>
+                                   <li>Communicate via TCP or Unix domain sockets</li>
+                                   <li>Keepalive mechanism avoid connect/close for each request</li>
+                                 </ul>
+                               </section>
+
+                               <section>
+                                 <h2>CoSockets</h2>
+                                 <pre><code>
+location /memcached-from-lua {
+  content_by_lua '
+    local sock = ngx.socket.connect("127.0.0.1", 11211)
+    local bytes, err = sock:send("set foo bar\r\n")
+
+    if not bytes then
+      ngx.say("failed to send.. \n", err)
+      return
+    end
+
+    local data = sock:receive()
+    if not data then
+      ngx.say("Failed to receive data..\n")
+    end
+
+    ngx.say("Result : ", data)
+  ';
+
+}
+                                 </code></pre>
+                               </section>
+
+                               <section>
+                                 <h2>Some libraries using pure Cosockets</h2>
+                                 <ul>
+                                   <li>
+                                     <a href="https://github.com/agentzh/lua-resty-memcached">
+                                       https://github.com/agentzh/lua-resty-memcached
+                                     </a>
+                                   </li>
+                                   <li>
+                                     <a href="https://github.com/agentzh/lua-resty-redis">
+                                       https://github.com/agentzh/lua-resty-redis
+                                     </a>
+                                   </li>
+                                   <li>
+                                     <a href="https://github.com/agentzh/lua-resty-mysql">
+                                       https://github.com/agentzh/lua-resty-mysql
+                                     </a>
+                                   </li>
+                                 </ul>
+                               </section>
+
+                               <section>
+                                 <h2>Summary</h2>
+                                 <ul>
+                                   <li>The Nginx architecture is excellent for highly scalable applications.</li>
+                                   <li>Nginx can do a variety of things thanks to module extensions, and one 
+                                   can resuse those extensions by issuing sub-requests in Lua.</li>
+                                   <li>lua-nginx-module makes use of the evented architecture in Nginx, 
+                                   providing a powerful and performant programming environment.</li>
+                                   <li>It's possible to do 100% non-blocking I/O with readable code.</li>
+                                 </ul>
+                               </section>
+
+                               <section>
+                                 <h2>References</h2>
+                                 <ul>
+                                   <li>
+                                     <a href="http://www.aosabook.org/en/nginx.html">
+                                       http://www.aosabook.org/en/nginx.html
+                                     </a>
+                                   </li>
+                                   <li>
+                                     <a href="http://openresty.org">
+                                       http://openresty.org
+                                     </a>
+                                   </li>
+                                   <li>
+                                     <a href="http://www.evanmiller.org/nginx-modules-guide.html">
+                                       http://www.evanmiller.org/nginx-modules-guide.html
+                                     </a>
+                                   </li>
+                                  <li>
+                                     <a href="http://wiki.nginx.org/HttpLuaModule">
+                                       http://wiki.nginx.org/HttpLuaModule
+                                     </a>
+                                   </li>
+                                 </ul>
+                               </section>
+
+                               <section>
+                                 <h2>Books</h2>
+                                 <img src="img/nginx_webserver_implementation_cookbook.jpeg"/>
+                                 <img src="img/nginx_http_server_book.jpeg" width="124" height="152"/>
+                                 <img src="img/programming_in_lua.jpg" width="124" height="152"/>
+                               </section>
+
+                               <section>
+                                 <h2>Questions</h2>
+                                 <br/><br/>
+                                 <h1>?</h1>
+                               </section>
+
+                               <section>
+                                 <h2>Thanks</h2>
+                                 <br/>
+                                 <ul style="list-style-type: none;">
+                                   <li>
+                                     <img src="http://github.com/intridea/authbuttons/raw/master/png/twitter_64.png"/>
+                                     <a href="http://www.twitter.com/tonyfabeen">http://www.twitter.com/tonyfabeen</a>
+                                   </li>
+                                   <li>
+                                     <img src="http://github.com/intridea/authbuttons/raw/master/png/linkedin_64.png"/>
+                                     <a href="http://www.linkedin.com/in/tonyfabeen">http://www.linkedin.com/in/tonyfabeen</a>
+                                   </li>
+                                   <li>
+                                     <img src="http://github.com/intridea/authbuttons/raw/master/png/github_64.png"/>
+                                     <a href="https://github.com/tonyfabeen">https://github.com/tonyfabeen</a>
+                                   </li>
+                                 </ul>
+                                 <br/>
+                                 <br/>
+                                 <p>
+                                   <a href="http://www.slimstacks.com">
+                                     <img src="img/logo_slimstacks_color_nobg.png" style="width: 240px;">
+                                   </a>
+                                </p>
+                               </section>
+
+                        </div>
+
+			<!-- The navigational controls UI -->
+			<aside class="controls">
+				<a class="left" href="#">&#x25C4;</a>
+				<a class="right" href="#">&#x25BA;</a>
+				<a class="up" href="#">&#x25B2;</a>
+				<a class="down" href="#">&#x25BC;</a>
+			</aside>
+
+			<!-- Presentation progress bar -->
+			<div class="progress"><span></span></div>
+			
+		</div>
+
+		<script src="lib/js/head.min.js"></script>
+
+		<script>
+			// Load reveal.js as well as a classList polyfill if needed
+			head.js( !document.body.classList ? 'lib/js/classList.js' : null )
+				.js( 'js/reveal.js', function() {
+
+				// Parse the query string into a key/value object
+				var query = {};
+				location.search.replace( /[A-Z0-9]+?=(\w*)/gi, function(a) {
+					query[ a.split( '=' ).shift() ] = a.split( '=' ).pop();
+				} );
+
+				// Fires when a slide with data-state=customevent is activated
+				Reveal.addEventListener( 'customevent', function() {
+					console.log( '"customevent" has fired' );
+				} );
+
+				// Fires each time a new slide is activated
+				Reveal.addEventListener( 'slidechanged', function( event ) {
+					// event.previousSlide, event.currentSlide, event.indexh, event.indexv
+				} );
+
+				// Full list of configuration options available here:
+				// https://github.com/hakimel/reveal.js#configuration
+				Reveal.initialize({
+					controls: true,
+					progress: true,
+					history: true,
+					
+					theme: query.theme || 'beige', // default/neon/beige
+					transition: query.transition || 'concave' // default/cube/page/concave/linear(2d)
+				});
+
+			} );
+			
+			// Load highlight.js for syntax highlighting of code samples
+			head.js( 'lib/js/highlight.js', function() { 
+				hljs.initHighlightingOnLoad(); 
+			} );
+
+			// If we're runnning the notes server we need to include some additional JS
+			// TODO Is there a better way to determine if we're running the notes server?
+			if( window.location.host === 'localhost:1947' ) {
+				head.js( 'socket.io/socket.io.js', 'plugin/speakernotes/client.js' );
+			}
+		</script>
+		
+	</body>
+</html>
